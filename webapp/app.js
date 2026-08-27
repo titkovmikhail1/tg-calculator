@@ -140,6 +140,7 @@ form.addEventListener("submit", (event) => {
     bulkResult.textContent = previewLines.join("\n");
     bulkResult.hidden = false;
     resultPanel.hidden = false;
+    resultPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
   } catch (calculationError) {
     latestCalculation = null;
     resultPanel.hidden = true;
