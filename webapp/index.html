@@ -19,11 +19,6 @@
     </header>
 
     <form id="calculator-form" novalidate>
-      <div class="mode-tabs" role="tablist" aria-label="Режим расчёта">
-        <label class="mode-tab"><input type="radio" name="mode" value="single" checked><span>Одиночный расчёт</span></label>
-        <label class="mode-tab"><input type="radio" name="mode" value="bulk"><span>Массовый расчёт</span></label>
-      </div>
-
       <section class="card parameters-card">
         <h2>Параметры</h2>
         <div class="parameter-grid">
@@ -42,19 +37,12 @@
 
       <section class="card input-card">
         <h2><span class="step-number">1</span>Вводные данные</h2>
-        <div id="single-input" class="amount-field">
-          <label class="sr-only" for="input-number">Сумма</label>
-          <input id="input-number" name="input-number" type="text" inputmode="decimal" autocomplete="off" placeholder="Введите сумму" aria-describedby="input-error">
-          <span>₽</span>
-        </div>
-        <div id="bulk-input" hidden>
-          <label class="sr-only" for="bulk-text">Список каналов</label>
-          <textarea id="bulk-text" rows="7" placeholder="Введите список каналов..." aria-describedby="input-error"></textarea>
-        </div>
+        <label class="sr-only" for="bulk-text">Список каналов</label>
+        <textarea id="bulk-text" rows="7" placeholder="Введите список каналов..." aria-describedby="input-error"></textarea>
         <p id="input-error" class="error-message" role="alert"></p>
       </section>
 
-      <button id="calculate-button" class="primary-button" type="submit">Рассчитать</button>
+      <button id="calculate-button" class="primary-button" type="submit">Рассчитать список</button>
     </form>
 
     <section id="result-panel" class="card result-card" aria-live="polite" hidden>
@@ -62,7 +50,7 @@
       <output id="result-value">0.00 ₽</output>
       <p id="vat-details" class="vat-details"></p>
       <pre id="bulk-result" class="bulk-result" hidden></pre>
-      <button id="send-button" class="secondary-button" type="button">Отправить в чат</button>
+      <button id="send-button" class="secondary-button" type="button">Отправить список в чат</button>
     </section>
   </main>
   <script src="app.js"></script>
