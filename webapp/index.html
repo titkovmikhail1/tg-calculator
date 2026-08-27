@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f0f1a">
+  <title>PR-Calculator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+  <main class="app-shell">
+    <header class="page-header">
+      <h1>PR-Calculator</h1>
+      <p>Расчёт стоимости размещения</p>
+    </header>
+
+    <form id="calculator-form" novalidate>
+      <div class="mode-tabs" role="tablist" aria-label="Режим расчёта">
+        <label class="mode-tab"><input type="radio" name="mode" value="single" checked><span>Одиночный расчёт</span></label>
+        <label class="mode-tab"><input type="radio" name="mode" value="bulk"><span>Массовый расчёт</span></label>
+      </div>
+
+      <section class="card parameters-card">
+        <h2>Параметры</h2>
+        <div class="parameter-grid">
+          <label class="toggle-row"><span>ЕРИД</span><input id="erid" type="checkbox"><span class="toggle" aria-hidden="true"></span></label>
+          <label class="toggle-row"><span>Срочно</span><input id="urgent" type="checkbox"><span class="toggle" aria-hidden="true"></span></label>
+          <label class="toggle-row"><span>Газпром</span><input id="gazprom" type="checkbox"><span class="toggle" aria-hidden="true"></span></label>
+        </div>
+        <div class="vat-control">
+          <span class="control-label">НДС</span>
+          <div class="vat-tabs" role="radiogroup" aria-label="Режим НДС">
+            <label><input id="nds-inside" type="radio" name="nds-mode" value="inside" checked><span>НДС уже внутри</span></label>
+            <label><input id="nds-outside" type="radio" name="nds-mode" value="outside"><span>НДС сверху</span></label>
+            <label><input id="nds-none" type="radio" name="nds-mode" value="none"><span>НДС нет</span></label>
+          </div>
+        </div>
+      </section>
+
+      <section class="card input-card">
+        <h2><span class="step-number">1</span>Вводные данные</h2>
+        <div id="single-input" class="amount-field">
+          <label class="sr-only" for="input-number">Сумма</label>
+          <input id="input-number" name="input-number" type="text" inputmode="decimal" autocomplete="off" placeholder="Введите сумму" aria-describedby="input-error">
+          <span>₽</span>
+        </div>
+        <div id="bulk-input" hidden>
+          <label class="sr-only" for="bulk-text">Список каналов</label>
+          <textarea id="bulk-text" rows="7" placeholder="Введите список каналов..." aria-describedby="input-error"></textarea>
+        </div>
+        <p id="input-error" class="error-message" role="alert"></p>
+      </section>
+
+      <button id="calculate-button" class="primary-button" type="submit">Рассчитать</button>
+    </form>
+
+    <section id="result-panel" class="card result-card" aria-live="polite" hidden>
+      <p id="result-label" class="result-label">Итого, с НДС</p>
+      <output id="result-value">0.00 ₽</output>
+      <p id="vat-details" class="vat-details"></p>
+      <pre id="bulk-result" class="bulk-result" hidden></pre>
+      <button id="send-button" class="secondary-button" type="button">Отправить в чат</button>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
