@@ -43,17 +43,17 @@ function calculatePrice(inputNumber, erid, urgent, gazprom) {
   if (erid) result *= 1.03;
   if (urgent) result *= 1.1;
   result /= gazprom ? 0.94 : 0.87;
-  return Math.round((result + Number.EPSILON) * 100) / 100;
+  return Math.round(result / 100) * 100;
 }
 
 function calculateVatDetails(finalPrice, ndsMode) {
   if (ndsMode === "none") {
     return { displayedPrice: finalPrice, vat: 0 };
   }
-  const vat = Math.round((finalPrice * 0.05 / 1.05 + Number.EPSILON) * 100) / 100;
-  const displayedPrice = ndsMode === "inside"
-    ? finalPrice
-    : Math.round((finalPrice - vat + Number.EPSILON) * 100) / 100;
+  const vat = Math.round((finalPrice * 0.05 + Number.EPSILON) * 100) / 100;
+    const displayedPrice = ndsMode === "inside"
+      ? Math.round((finalPrice + vat + Number.EPSILON) * 100) / 100
+      : finalPrice;
   return { displayedPrice, vat };
 }
 
@@ -75,11 +75,9 @@ function buildBulkPreview(text, options) {
     const inputNumber = parsePositiveNumber(match[2]);
     const finalPrice = calculatePrice(inputNumber, options.erid, options.urgent, options.gazprom);
     const { displayedPrice, vat } = calculateVatDetails(finalPrice, options.nds_mode);
-    const details = options.nds_mode === "none"
-      ? `${formatMoney(displayedPrice)} руб.`
-      : options.nds_mode === "inside"
+    const details = options.nds_mode === "inside"
       ? `${formatMoney(displayedPrice)} руб., в том числе НДС (НДС ${formatMoney(vat)} руб.)`
-      : `${formatMoney(displayedPrice)} руб. + НДС ${formatMoney(vat)} руб. = ${formatMoney(finalPrice)} руб.`;
+      : `${formatMoney(displayedPrice)} руб. + НДС ${formatMoney(vat)} руб. = ${formatMoney(displayedPrice + vat)} руб.`;
     lines.push(`@${match[1]} (${details})`);
   });
   return lines;
