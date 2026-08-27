@@ -7,7 +7,7 @@ import re
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 from aiogram import Bot, Dispatcher, F, Router
-from aiogram.exceptions import ChatNotFound
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import CommandStart
 from aiogram.types import KeyboardButton, Message, ReplyKeyboardMarkup, WebAppInfo
 
@@ -22,6 +22,11 @@ CHANNEL_LINE_PATTERN = re.compile(
 )
 
 
+def round_to_hundreds(value: Decimal) -> Decimal:
+    """Округляет стоимость до ближайших 100 рублей."""
+    return value.quantize(Decimal("1E2"), rounding=ROUND_HALF_UP)
+
+
 def calculate_price(input_number: Decimal, erid: bool, urgent: bool, gazprom: bool) -> Decimal:
     """Рассчитывает стоимость по общей формуле с математическим округлением."""
     result = input_number / Decimal("0.8") * Decimal("1.4")
@@ -32,18 +37,20 @@ def calculate_price(input_number: Decimal, erid: bool, urgent: bool, gazprom: bo
         result *= Decimal("1.1")
     result /= Decimal("0.94") if gazprom else Decimal("0.87")
 
-    return result.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return round_to_hundreds(result)
 
 
 def calculate_vat_details(final_price: Decimal, nds_mode: str) -> tuple[Decimal, Decimal]:
     """Возвращает отображаемую стоимость и сумму НДС."""
     if nds_mode == "none":
         return final_price, Decimal("0.00")
-    vat = (final_price * Decimal("0.05") / Decimal("1.05")).quantize(
+    vat = (final_price * Decimal("0.05")).quantize(
         Decimal("0.01"), rounding=ROUND_HALF_UP
     )
-    displayed_price = final_price if nds_mode == "inside" else (final_price - vat).quantize(
-        Decimal("0.01"), rounding=ROUND_HALF_UP
+    displayed_price = (
+        (final_price + vat).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        if nds_mode == "inside"
+        else final_price
     )
     return displayed_price, vat
 
@@ -152,6 +159,7 @@ async def handle_start(message: Message) -> None:
 @router.message(F.web_app_data)
 async def handle_web_app_data(message: Message, bot: Bot) -> None:
     """Проверяет данные Web App и отправляет результат в чат."""
+    logging.info("Получены данные Web App от пользователя %s", message.from_user.id if message.from_user else "unknown")
     try:
         payload = json.loads(message.web_app_data.data)
         if not isinstance(payload, dict):
@@ -169,78 +177,70 @@ async def handle_web_app_data(message: Message, bot: Bot) -> None:
         await message.answer("Не удалось проверить данные калькулятора. Попробуйте ещё раз.")
         return
 
-    if mode == "bulk":
-        bulk_text = payload.get("bulk_text")
-        if not isinstance(bulk_text, str) or not bulk_text.strip():
-            await message.answer("Список каналов пуст. Добавьте хотя бы одну строку.")
-            return
+    try:
+        if mode == "bulk":
+            bulk_text = payload.get("bulk_text")
+            if not isinstance(bulk_text, str) or not bulk_text.strip():
+                await message.answer("Список каналов пуст. Добавьте хотя бы одну строку.")
+                return
 
-        output_lines = []
-        for raw_line in bulk_text.splitlines():
-            line = raw_line.strip()
-            if not line:
-                continue
-            try:
-                username, input_number = parse_channel_line(line)
-                chat = await bot.get_chat(chat_id=f"@{username}")
-                title = chat.title or username
-            except ChatNotFound:
-                username_match = CHANNEL_LINE_PATTERN.fullmatch(line)
-                if not username_match:
+            output_lines = []
+            for raw_line in bulk_text.splitlines():
+                line = raw_line.strip()
+                if not line:
+                    continue
+                try:
+                    username, input_number = parse_channel_line(line)
+                    chat = await bot.get_chat(chat_id=f"@{username}")
+                    title = chat.title or username
+                except TelegramBadRequest as error:
+                    if "chat not found" not in str(error).lower():
+                        raise
+                    username_match = CHANNEL_LINE_PATTERN.fullmatch(line)
+                    if not username_match:
+                        output_lines.append(f"⚠️ Не удалось распознать: {line}")
+                        continue
+                    username = username_match.group(1)
+                    title = f"{username} (название недоступно)"
+                    input_number = parse_input_number(username_match.group(2))
+                except (TypeError, ValueError, InvalidOperation):
                     output_lines.append(f"⚠️ Не удалось распознать: {line}")
                     continue
-                username = username_match.group(1)
-                title = f"{username} (название недоступно)"
-                input_number = parse_input_number(username_match.group(2))
-            except (TypeError, ValueError, InvalidOperation):
-                output_lines.append(f"⚠️ Не удалось распознать: {line}")
-                continue
 
-            final_price = calculate_price(input_number, erid, urgent, gazprom)
-            displayed_price, vat = calculate_vat_details(final_price, nds_mode)
-            channel = f"[{escape_markdown(title)}](https://t.me/{username})"
-            if nds_mode == "inside":
-                details = (
-                    f"{format_money(displayed_price)} руб., "
-                    f"в том числе НДС (НДС {format_money(vat)} руб.)"
+                final_price = round_to_hundreds(
+                    calculate_price(input_number, erid, urgent, gazprom)
                 )
-            elif nds_mode == "outside":
-                details = (
-                    f"{format_money(displayed_price)} руб. + НДС "
-                    f"{format_money(vat)} руб. = {format_money(final_price)} руб."
-                )
-            else:
-                details = f"{format_money(displayed_price)} руб."
-            output_lines.append(f"{channel} ({details})")
+                displayed_price, vat = calculate_vat_details(final_price, nds_mode)
+                channel = f"[{escape_markdown(title)}](https://t.me/{username})"
+                if nds_mode == "inside":
+                    details = f"{format_money(displayed_price)} руб., в том числе НДС (НДС {format_money(vat)} руб.)"
+                elif nds_mode == "outside":
+                    details = f"{format_money(displayed_price)} руб. + НДС {format_money(vat)} руб. = {format_money(final_price)} руб."
+                else:
+                    details = f"{format_money(displayed_price)} руб."
+                output_lines.append(f"{channel} ({details})")
 
-        if not output_lines:
-            await message.answer("В списке нет непустых строк для расчёта.")
+            if not output_lines:
+                await message.answer("В списке нет непустых строк для расчёта.")
+                return
+            await send_long_message(message, "\n".join(output_lines))
             return
-        await send_long_message(message, "\n".join(output_lines))
-        return
 
-    try:
         input_number = parse_input_number(payload.get("input_number"))
-        final_price = calculate_price(input_number, erid, urgent, gazprom)
+        final_price = round_to_hundreds(
+            calculate_price(input_number, erid, urgent, gazprom)
+        )
         displayed_price, vat = calculate_vat_details(final_price, nds_mode)
-    except (TypeError, ValueError, InvalidOperation) as error:
-        logging.warning("Отклонены данные одиночного расчёта: %s", error)
-        await message.answer("Не удалось проверить данные калькулятора. Попробуйте ещё раз.")
-        return
-
-    if nds_mode == "inside":
-        response = (
-            f"Итого: {format_money(displayed_price)} руб.\n"
-            f"в том числе НДС (НДС {format_money(vat)} руб.)"
-        )
-    elif nds_mode == "outside":
-        response = (
-            f"Стоимость без НДС: {format_money(displayed_price)} руб.\n"
-            f"+ НДС {format_money(vat)} руб. = {format_money(final_price)} руб."
-        )
-    else:
-        response = f"Итого: {format_money(displayed_price)} руб.\nНДС не начисляется"
-    await message.answer(response)
+        if nds_mode == "inside":
+            response = f"Итого: {format_money(displayed_price)} руб.\nв том числе НДС (НДС {format_money(vat)} руб.)"
+        elif nds_mode == "outside":
+                response = f"Стоимость: {format_money(displayed_price)} руб.\n+ НДС {format_money(vat)} руб. = {format_money(displayed_price + vat)} руб."
+        else:
+            response = f"Итого: {format_money(displayed_price)} руб.\nНДС не начисляется"
+        await message.answer(response)
+    except Exception:
+        logging.exception("Ошибка обработки данных Web App")
+        await message.answer("Ошибка обработки расчёта. Проверьте данные и попробуйте ещё раз.")
 
 
 async def main() -> None:
@@ -251,6 +251,7 @@ async def main() -> None:
     bot = Bot(token=BOT_TOKEN)
     dispatcher = Dispatcher()
     dispatcher.include_router(router)
+    await bot.delete_webhook(drop_pending_updates=False)
     await dispatcher.start_polling(bot)
 
 
