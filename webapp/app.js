@@ -99,10 +99,10 @@ function buildBulkPreview(text, options) {
 
     const inputNumber = parsePositiveNumber(match[2]);
     const finalPrice = calculatePrice(inputNumber, options.erid, options.urgent, options.gazprom);
-    const { displayedPrice, vat } = calculateVatDetails(finalPrice, options.ndsMode);
-    const details = options.ndsMode === "none"
+    const { displayedPrice, vat } = calculateVatDetails(finalPrice, options.nds_mode);
+    const details = options.nds_mode === "none"
       ? `${formatMoney(displayedPrice)} руб.`
-      : options.ndsMode === "inside"
+      : options.nds_mode === "inside"
       ? `${formatMoney(displayedPrice)} руб., в том числе НДС (НДС ${formatMoney(vat)} руб.)`
       : `${formatMoney(displayedPrice)} руб. + НДС ${formatMoney(vat)} руб. = ${formatMoney(finalPrice)} руб.`;
     lines.push(`@${match[1]} (${details})`);
@@ -112,7 +112,26 @@ function buildBulkPreview(text, options) {
 
 function showError(message) {
   error.textContent = message;
-  input.setAttribute("aria-invalid", "true");
+  const activeField = getMode() === "bulk" ? bulkText : input;
+  activeField.setAttribute("aria-invalid", "true");
+}
+
+function sendCalculationToChat() {
+  if (!latestCalculation) {
+    showError("Сначала выполните расчёт.");
+    return;
+  }
+  if (!telegram || typeof telegram.sendData !== "function") {
+    showError("Откройте мини-приложение через Telegram, чтобы отправить результат.");
+    return;
+  }
+
+  try {
+    telegram.sendData(JSON.stringify(latestCalculation));
+  } catch (sendError) {
+    showError("Не удалось отправить результат. Откройте калькулятор заново.");
+    console.error("Ошибка отправки Web App data:", sendError);
+  }
 }
 
 form.addEventListener("submit", (event) => {
@@ -134,7 +153,7 @@ form.addEventListener("submit", (event) => {
       erid: document.getElementById("erid").checked,
       urgent: document.getElementById("urgent").checked,
       gazprom: document.getElementById("gazprom").checked,
-      ndsMode: getNdsMode(),
+      nds_mode: getNdsMode(),
       nds: getNdsMode() !== "none",
     };
     try {
@@ -165,18 +184,18 @@ form.addEventListener("submit", (event) => {
       erid: document.getElementById("erid").checked,
       urgent: document.getElementById("urgent").checked,
       gazprom: document.getElementById("gazprom").checked,
-      ndsMode: getNdsMode(),
+      nds_mode: getNdsMode(),
       nds: getNdsMode() !== "none",
     };
     const finalPrice = calculatePrice(inputNumber, options.erid, options.urgent, options.gazprom);
-    const { displayedPrice, vat } = calculateVatDetails(finalPrice, options.ndsMode);
+    const { displayedPrice, vat } = calculateVatDetails(finalPrice, options.nds_mode);
     latestCalculation = { ...options, result: finalPrice };
     bulkResult.hidden = true;
-    resultLabel.textContent = options.ndsMode === "inside" ? "Итого, с НДС" : "Итого";
+    resultLabel.textContent = options.nds_mode === "inside" ? "Итого, с НДС" : "Итого";
     resultValue.textContent = `${formatMoney(displayedPrice)} ₽`;
-    vatDetails.textContent = options.ndsMode === "inside"
+    vatDetails.textContent = options.nds_mode === "inside"
       ? `в том числе НДС (НДС ${formatMoney(vat)})`
-      : options.ndsMode === "outside"
+      : options.nds_mode === "outside"
       ? `Стоимость без НДС: ${formatMoney(displayedPrice)} ₽\nНДС ${formatMoney(vat)} ₽\nВсего: ${formatMoney(finalPrice)} ₽`
       : "НДС не начисляется";
     resultPanel.hidden = false;
@@ -188,10 +207,5 @@ form.addEventListener("submit", (event) => {
 });
 
 sendButton.addEventListener("click", () => {
-  if (!latestCalculation) return;
-  if (telegram) {
-    telegram.sendData(JSON.stringify(latestCalculation));
-    return;
-  }
-  showError("Отправка доступна только внутри Telegram.");
+  sendCalculationToChat();
 });
